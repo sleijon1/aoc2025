@@ -1,3 +1,5 @@
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import lru_cache
 from itertools import combinations
 
 from tqdm import tqdm
@@ -5,66 +7,56 @@ from tqdm import tqdm
 tiles = [tuple(map(int, r.split(","))) for r in open("input.txt").read().split("\n")]
 
 green_tiles = set()
-red_corners = set()
+allowed_tiles = set()
 for (x1, y1), (x2, y2) in combinations(tiles, 2):
     if x1 == x2:
-        red_corners.add((x1, y1))
-        red_corners.add((x1, y2))
         for y in range(min(y1, y2), max(y1, y2) + 1):
             green_tiles.add((x1, y))
     elif y1 == y2:
-        red_corners.add((x1, y1))
-        red_corners.add((x2, y1))
         for x in range(min(x1, x2), max(x1, x2) + 1):
             green_tiles.add((x, y1))
 
 green_tiles = tuple(green_tiles)
 
+x_ranges = dict()
+for x, y in tqdm(green_tiles):
+    if y in x_ranges:
+        mix, maxx = x_ranges[y]
+        if x < mix:
+            mix = x
+        if x > maxx:
+            maxx = x
+        x_ranges[y] = (mix, maxx)
+    else:
+        x_ranges[y] = (x, x)
+
+
 p1sol, p2sol = [], []
 
 
-from functools import lru_cache
-
-doomed_tiles = set()
-print(len(green_tiles))
-print(len(red_corners))
-
-
 @lru_cache
-def rect_edges_fully_covered(bottom_edge, top_edge, left_edge, right_edge):
+def rect_edges_fully_covered2(bottom_edge, top_edge, left_edge, right_edge):
     edge_points = bottom_edge + top_edge + left_edge + right_edge
-    if any([ep in doomed_tiles for ep in edge_points]):
-        return False
     for x, y in edge_points:
-        left, right, up, down, on_top = False, False, False, False, False
-        for tx, ty in red_corners:
-            if ty == y:
-                if tx > x:
-                    right = True
-                elif tx < x:
-                    left = True
-                elif tx == x:
-                    on_top = True
-            if tx == x:
-                if ty < y:
-                    up = True
-                elif ty > y:
-                    down = True
-                elif ty == y:
-                    on_top = True
-            if sum([left, right, on_top]) >= 2 or sum([up, down, on_top]) >= 2:
-                break
+        try:
+            mix, max = x_ranges[y]
+            if not mix <= x <= max:
+                return False
+        except KeyError:
+            return False
 
-        if not (sum([left, right, on_top]) >= 2 or sum([up, down, on_top]) >= 2):
-            doomed_tiles.add(edge_points)
-            return False  # one point fails → rectangle not fully covered
-    return True  # all points passed
+    return True
 
 
 N = len(tiles)
 iterations = N * (N - 1) / 2
-for (x1, y1), (x2, y2) in tqdm(combinations(tiles, 2), total=iterations):
-    p1sol.append(abs((x1 - x2 + 1) * (y1 - y2 + 1)))
+
+
+def rectangles(comb):
+    (x1, y1), (x2, y2) = comb
+    # p2sol = []
+    # for (x1, y1), (x2, y2) in combinations:
+    #   p1sol.append(abs((x1 - x2 + 1) * (y1 - y2 + 1)))
     # Rectangle bounds
     x_min, y_min, x_max, y_max = min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)
 
@@ -81,8 +73,19 @@ for (x1, y1), (x2, y2) in tqdm(combinations(tiles, 2), total=iterations):
     #    if line_intersects_rect_edges(p1, p2, rect):
     #        outside = True
     #        break
-    if rect_edges_fully_covered(bottom_edge, top_edge, left_edge, right_edge):
+    if rect_edges_fully_covered2(bottom_edge, top_edge, left_edge, right_edge):
+        return abs((x1 - x2 + 1) * (y1 - y2 + 1))
         p2sol.append(abs((x1 - x2 + 1) * (y1 - y2 + 1)))
+    return 0
 
-print(f"p1: {max(p1sol)}")
-print(f"p2: {max(p2sol)}")
+
+work = combinations(tiles, 2)
+with ProcessPoolExecutor() as exe:
+    futures = [exe.submit(rectangles, combo) for combo in work]
+
+results = []
+for f in tqdm(as_completed(futures), total=len(futures)):
+    results.append(f.result())
+# print(results)
+# sprint(f"p1: {max(p1sol)}")
+print(f"p2: {max(results)}")
