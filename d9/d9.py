@@ -1,88 +1,64 @@
 from itertools import combinations
 
+from tqdm import tqdm
+
 tiles = [tuple(map(int, r.split(","))) for r in open("input.txt").read().split("\n")]
 
-print("XQSD")
-_map = [
-    ["."] * (max([x[0] for x in tiles]) + 3)
-    for _ in range(max(x[1] for x in tiles) + 3)
-]
-# for r in _map:
-#    print("".join(r))
-# print(len(_map), len(_map[0]))
-print("lmao")
-green_lines = set()
-static_xs = set()
-for (x1, y1), (x2, y2) in combinations(tiles, 2):
-    x_range, y_range = x1, y1
-    if y1 == y2:
-        if x1 > x2:
-            x_range = range(x2, x1 + 1)
-        else:
-            x_range = range(x1, x2 + 1)
-    elif x1 == x2:
-        if y1 > y2:
-            y_range = range(y2, y1 + 1)
-        else:
-            y_range = range(y1, y2 + 1)
-    else:
-        continue
-    green_lines.add((x_range, y_range))
-
 green_tiles = set()
-
-# for x, y in green_tiles:
-#    _map[y][x] = "X"
-
-for line in green_lines:
-    if isinstance(line[0], range):
-        for x in line[0]:
-            _map[line[1]][x] = "X"
-            green_tiles.add((x, line[1]))
-
-    elif isinstance(line[1], range):
-        for y in line[1]:
-            _map[y][line[0]] = "X"
-            green_tiles.add((line[0], y))
-
-print("lol")
-for y, row in enumerate(_map):
-    try:
-        xm = row.index("X")
-        xe = len(row) - 1 - row[::-1].index("X")
-        for x in range(xm, xe):
-            _map[y][x] = "X"
-            green_tiles.add(
-                (x, y)
-            )  # memory error but idk why i guess add ranges but seems weird
-        if len(green_tiles) % 1000000 == 0:
-            print("size:", len(green_tiles), "last:", x, y)
-
-    except ValueError:
-        continue
-
-
-print(len(green_tiles))
-
-
-p1, p2 = [], []
-
-
 for (x1, y1), (x2, y2) in combinations(tiles, 2):
-    p1.append(abs((x1 - x2 + 1) * (y1 - y2 + 1)))
-    tile_in_space = False
-    for tile in tiles:
-        if tile != (x1, y1) and tile != (x2, y2):
-            if (x1 < tile[0] < x2 or x2 < tile[0] < x1) and (
-                y1 < tile[1] < y2 or y2 < tile[1] < y1
-            ):
-                tile_in_space = True
-                break
-    if not tile_in_space and (x1, y2) in green_tiles and (x2, y1) in green_tiles:
-        p2.append(abs((x1 - x2 + 1) * (y1 - y2 + 1)))
-        # if abs((x1 - x2 + 1) * (y1 - y2 + 1)) == 40:
-        #    print((x1, y1), (x2, y2), abs((x1 - x2 + 1) * (y1 - y2 + 1)))
-# print(max(p1), max(p2))
+    if x1 == x2:
+        for y in range(min(y1, y2), max(y1, y2) + 1):
+            green_tiles.add((x1, y))
+    elif y1 == y2:
+        for x in range(min(x1, x2), max(x1, x2) + 1):
+            green_tiles.add((x, y1))
 
-print(f"p1: {max(p1)}")
-print(f"p2: {max(p2)}")
+
+p1sol, p2sol = [], []
+
+
+def rect_edges_fully_covered(bottom_edge, top_edge, left_edge, right_edge, green_tiles):
+    """
+    Check if all points on the rectangle edges have both a green tile to the left and to the right.
+    green_tiles: set of (x, y) points
+    """
+    # Combine all edge points
+    edge_points = bottom_edge + top_edge + left_edge + right_edge
+
+    for x, y in edge_points:
+        # Check left
+        left_exists = any((xi, y) in green_tiles for xi in range(x_min, x))
+        # Check right
+        right_exists = any((xi, y) in green_tiles for xi in range(x + 1, x_max + 1))
+        if not (left_exists and right_exists):
+            return False  # one point fails → rectangle not fully covered
+    return True  # all points passed
+
+
+N = len(tiles)
+iterations = N * (N - 1) / 2
+for (x1, y1), (x2, y2) in tqdm(combinations(tiles, 2), total=iterations):
+    p1sol.append(abs((x1 - x2 + 1) * (y1 - y2 + 1)))
+    # Rectangle bounds
+    x_min, y_min, x_max, y_max = min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)
+
+    # Horizontal edges (points)
+    bottom_edge = [(x, y_min) for x in range(x_min, x_max + 1)]
+    top_edge = [(x, y_max) for x in range(x_min, x_max + 1)]
+
+    # Vertical edges (points), exclude corners to avoid duplicates
+    left_edge = [(x_min, y) for y in range(y_min + 1, y_max)]
+    right_edge = [(x_max, y) for y in range(y_min + 1, y_max)]
+
+    # outside = False
+    # for p1, p2 in green_lines:
+    #    if line_intersects_rect_edges(p1, p2, rect):
+    #        outside = True
+    #        break
+    if rect_edges_fully_covered(
+        bottom_edge, top_edge, left_edge, right_edge, green_tiles
+    ):
+        p2sol.append(abs((x1 - x2 + 1) * (y1 - y2 + 1)))
+
+print(f"p1: {max(p1sol)}")
+print(f"p2: {max(p2sol)}")
